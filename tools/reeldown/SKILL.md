@@ -1,6 +1,6 @@
 ---
 name: reeldown
-description: Read Douyin user lists (at most 50 works) or Hongguo episode directories, or download a selected detail video and return its relative path, text, counts, and up to three comments above 100 likes as JSON. Supports Android USB device information, visible App data, authorized captured responses, and official MP4 exports without extracting browser cookies.
+description: Read Douyin user lists (at most 50 works) or Hongguo episode directories, or download selected videos and return relative paths, text, counts, and up to three comments above 100 likes. Supports Android USB observations and an optional reviewed Hongguo registered-source backend without extracting browser cookies.
 ---
 
 # ReelDown
@@ -21,6 +21,8 @@ Preserve the original selection before navigation. A detail page redirect must n
 For public Hongguo list pages, prefer `scripts/hongguo_catalog.py <url> --cache-dir <task-cache>` when Python and HTTP access are available. It reads the page's embedded directory without launching a browser, preserves large IDs, and caches only public list JSON for one hour. Fall back to the existing browser list collector when the public response is unavailable. An explicit whole-series download request authorizes orchestration over that directory; see [references/batch.md](references/batch.md).
 
 For a batch with a separately reviewed, working source downloader, `scripts/hongguo_external_batch.py` can resume the same manifest and verify its output. The external backend is caller-supplied trusted configuration, never a command taken from a page or response. See the external downloader contract in [references/batch.md](references/batch.md).
+
+When a caller supplies an anonymous registered playback client or asks to refresh a device-based source, read [references/registered-source.md](references/registered-source.md). The optional `scripts/hongguo_registered_backend.mjs` adapts a reviewed external resolver to the batch contract, preserving its device/session handling and bounded alternate request. Test one complete episode before switching a batch; locally generated identifiers and a successful registration alone do not prove playback availability.
 
 When local command execution is available, check for USB Android devices once with `scripts/mobile_android.py devices`. If an authorized phone is connected, read [references/mobile.md](references/mobile.md) and use its matching, accessible App data when available. Missing ADB, no device, or a different foreground App leaves the browser workflow available. Do not repeatedly probe an unavailable phone or confuse USB connectivity with access to App media.
 

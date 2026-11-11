@@ -12,6 +12,8 @@ Read this for an explicitly requested mobile capture/signature workflow, or when
 
 Keep App version, User-Agent, device fields, query bytes, request body, timestamps, and signatures from the same real request. Changing an episode ID, JSON serialization, parameter order, or timestamp can invalidate a signature. ADB cannot invoke an arbitrary private signing SDK inside a release App. Do not fabricate identifiers from model/build properties, combine credentials from unrelated sessions, or report a successful device registration as successful playback retrieval.
 
+An explicitly selected anonymous registered client is an alternative source, not a phone-capture result. Its generated `cdid` must stay with the server-issued IDs from that registration. See [registered-source.md](registered-source.md) for the optional adapter, required model-duration evidence and single-attempt test.
+
 An existing user-authorized source client can be evaluated separately with one selected episode and its own bounded recovery policy. HTTP 200 with an empty body is a failed response. Do not start a whole application merely to call its resolver: startup code may alter proxy settings or write unrelated application state. Inspect the isolated module and preserve the host's current networking configuration.
 
 ## Capture one real request

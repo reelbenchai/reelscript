@@ -27,7 +27,15 @@ def save(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + '.part')
     temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2)+'\n', encoding='utf-8')
-    os.replace(temporary, path)
+    # Windows readers may briefly deny replacement while inspecting progress.
+    for attempt in range(7):
+        try:
+            os.replace(temporary, path)
+            break
+        except PermissionError:
+            if attempt == 6:
+                raise
+            time.sleep(0.02 * 2**attempt)
 
 
 def digest(path):
@@ -149,7 +157,10 @@ def verify_saved(root, record, sid, eid):
     path = resolve_video_path(result['video_path'], root)
     if path.stat().st_size != record['size_bytes'] or digest(path) != record['sha256']:
         raise ValueError('saved file hash mismatch')
-    verify_mp4(path, record['expected_duration'])
+    # An unchanged file retains its earlier complete decode verification.
+    # Legacy records without that receipt still need a fresh media probe.
+    if record.get('full_decode_verified') is not True:
+        verify_mp4(path, record['expected_duration'])
 
 
 def decode_check(path):

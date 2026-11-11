@@ -14,6 +14,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent))
 import hongguo_batch as batch
 from download_video import verify_mp4
 from validate_result import validate_result,resolve_video_path
+from backend_session import BackendSession
 
 
 def metadata(series,record,root):
@@ -62,8 +63,11 @@ def run(args):
     command=config.get('command')
     if not isinstance(command,list) or not command or any(not isinstance(s,str) for s in command):
         raise ValueError('invalid_backend_command')
-    if not any('{episode_id}' in s for s in command) or not any('{output}' in s for s in command):
+    protocol=config.get('protocol','oneshot')
+    if protocol not in {'oneshot','jsonl'}:raise ValueError('invalid_backend_protocol')
+    if protocol=='oneshot' and (not any('{episode_id}' in s for s in command) or not any('{output}' in s for s in command)):
         raise ValueError('backend_requires_identity_and_destination')
+    session=BackendSession(command) if protocol=='jsonl' else None
     for s in state['series']:
         if not isinstance(s['series_id'],str) or not s['series_id'].isascii() or not s['series_id'].isdigit():
             raise ValueError('invalid_series_id')
@@ -80,6 +84,8 @@ def run(args):
         state['summary']=batch.summary(state)
         batch.save(state_path,state)
     processed=0
+    attempted=0
+    max_attempts=getattr(args,'max_attempts',None)
     failures=0
     try:
         for series in state['series']:
@@ -102,12 +108,21 @@ def run(args):
                         if not receipt.is_file():raise ValueError('existing_file_unverified')
                         report=json.loads(receipt.read_text(encoding='utf-8'))
                     else:
-                        argv=[part.replace('{episode_id}',eid).replace('{output}',str(destination)) for part in command]
-                        result=subprocess.run(argv,stdin=subprocess.DEVNULL,capture_output=True,text=True,
-                                              encoding='utf-8',timeout=900,check=False)
-                        lines=result.stdout.strip().splitlines()
-                        report=json.loads(lines[-1]) if lines else {}
-                        if result.returncode or report.get('success') is not True:
+                        if max_attempts is not None and attempted>=max_attempts:
+                            state['source_stop_reason']='backend_attempt_limit'
+                            checkpoint();return state['summary']
+                        attempted+=1
+                        if session:
+                            report=session.request(eid,destination)
+                            returncode=0
+                        else:
+                            argv=[part.replace('{episode_id}',eid).replace('{output}',str(destination)) for part in command]
+                            result=subprocess.run(argv,stdin=subprocess.DEVNULL,capture_output=True,text=True,
+                                                  encoding='utf-8',timeout=900,check=False)
+                            lines=result.stdout.strip().splitlines()
+                            report=json.loads(lines[-1]) if lines else {}
+                            returncode=result.returncode
+                        if returncode or report.get('success') is not True:
                             code=report.get('error')
                             raise ValueError(code if isinstance(code,str) and code.replace('_','').isalnum() else 'external_download_failed')
                     verify_report(report,eid,destination)
@@ -121,6 +136,8 @@ def run(args):
                      full_decode_verified=True,reused_existing=False,recovered_receipt=existed)
                     for key in ('codec','width','height','quality'):
                         if key in report:record[key]=report[key]
+                    if report.get('source_kind')=='registered_client':
+                        record['source_kind']='registered_client'
                     record.pop('error',None);record.pop('request_sent',None)
                     failures=0;processed+=1
                     checkpoint()
@@ -139,7 +156,10 @@ def run(args):
                 time.sleep(1)
         checkpoint();return state['summary']
     finally:
-        lock.unlink(missing_ok=True)
+        try:
+            if session:session.close()
+        finally:
+            lock.unlink(missing_ok=True)
 
 
 def main():
@@ -149,14 +169,19 @@ def main():
     p.add_argument('--state',default='data/reeldown/batch.json')
     p.add_argument('--backend',type=Path,required=True)
     p.add_argument('--max-new',type=int)
+    p.add_argument('--max-attempts',type=int,
+                   help='Maximum external download requests, including failures; receipt recovery does not count.')
     args=p.parse_args()
     try:
         if args.max_new is not None and args.max_new<1:raise ValueError('invalid_limit')
+        if args.max_attempts is not None and args.max_attempts<1:raise ValueError('invalid_attempt_limit')
         result=run(args)
         print(json.dumps(result),flush=True)
         return 0 if result['complete'] else 2
-    except Exception:
-        print(json.dumps({'error':{'code':'external_batch_stopped','message':'Existing files were preserved; inspect the public manifest.'}}),flush=True)
+    except Exception as error:
+        # Report only the type, never backend commands, URLs, or credentials.
+        print(json.dumps({'error':{'code':'external_batch_stopped','error_type':type(error).__name__,
+                                  'message':'Existing files were preserved; inspect the public manifest.'}}),flush=True)
         return 1
 
 
