@@ -1,0 +1,5 @@
+# 本地产物，不进仓库
+downloads/
+.cache/
+__pycache__/
+.DS_Store

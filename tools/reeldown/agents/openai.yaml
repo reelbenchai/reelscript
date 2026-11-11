@@ -1,0 +1,4 @@
+interface:
+  display_name: "ReelDown"
+  short_description: "区分列表与详情，支持安卓 USB 设备信息、真实请求校验和视频导入"
+  default_prompt: "Use $reeldown to return this page's list or download its selected video as JSON, using the connected Android App's authorized data when available and preserving the original item identity."
